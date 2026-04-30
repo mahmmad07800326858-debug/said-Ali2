@@ -60,15 +60,16 @@
 </footer>
 
 <script type="module">
-    // استيراد مكتبة Supabase
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
 
-    // بيانات الربط الخاصة بك
+    // البيانات المستخرجة من صورك
     const supabaseUrl = 'https://jtqmrpmthnomcwkcyyce.supabase.co';
-    const supabaseKey = 'أدخل_مفتاح_ANON_KEY_هنا'; // استخرجه من Settings > API
+    const supabaseKey = 'أدخل_هنا_الـ_Anon_Key_الذي_نسخته_من_آخر_صورة'; 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // دالة الرفع والحفظ
+    const tableName = 'مكتبة السبزواري';
+    const bucketName = 'my-files';
+
     window.uploadAndSave = async () => {
         const name = document.getElementById('lessonName').value;
         const audioFile = document.getElementById('audioFile').files[0];
@@ -80,37 +81,31 @@
         if (!name) return alert("يرجى كتابة العنوان");
         
         btn.disabled = true;
-        status.innerText = "جاري رفع الملفات إلى Supabase...";
+        status.innerText = "جاري معالجة الملفات...";
 
         try {
             let audioUrl = "";
             let textUrl = "";
 
-            // رفع الملف الصوتي
             if (audioFile) {
                 const path = `audio/${Date.now()}_${audioFile.name}`;
-                const { data, error } = await supabase.storage.from('my-files').upload(path, audioFile);
-                if (error) throw error;
-                audioUrl = supabase.storage.from('my-files').getPublicUrl(path).data.publicUrl;
+                await supabase.storage.from(bucketName).upload(path, audioFile);
+                audioUrl = supabase.storage.from(bucketName).getPublicUrl(path).data.publicUrl;
             }
 
-            // رفع ملف النص
             if (textFile) {
                 const path = `text/${Date.now()}_${textFile.name}`;
-                const { data, error } = await supabase.storage.from('my-files').upload(path, textFile);
-                if (error) throw error;
-                textUrl = supabase.storage.from('my-files').getPublicUrl(path).data.publicUrl;
+                await supabase.storage.from(bucketName).upload(path, textFile);
+                textUrl = supabase.storage.from(bucketName).getPublicUrl(path).data.publicUrl;
             }
 
             if (editId) {
-                // تحديث بيانات موجودة
                 const updateData = { title: name };
                 if (audioUrl) updateData.audio_url = audioUrl;
                 if (textUrl) updateData.text_url = textUrl;
-                await supabase.from('lessons').update(updateData).eq('id', editId);
+                await supabase.from(tableName).update(updateData).eq('id', editId);
             } else {
-                // إضافة درس جديد
-                await supabase.from('lessons').insert([{
+                await supabase.from(tableName).insert([{
                     title: name,
                     audio_url: audioUrl,
                     text_url: textUrl
@@ -122,16 +117,15 @@
             loadLessons();
         } catch (e) {
             console.error(e);
-            alert("حدث خطأ! تأكد من إعدادات Policies في الباكت my-files");
+            alert("حدث خطأ! تأكد من إعدادات Policies في Supabase");
         }
         btn.disabled = false;
         status.innerText = "";
     };
 
-    // جلب البيانات من الجدول
     async function loadLessons() {
         const { data, error } = await supabase
-            .from('lessons')
+            .from(tableName)
             .select('*')
             .order('id', { ascending: false });
         
@@ -167,7 +161,7 @@
 
     window.deleteItem = async (id) => {
         if (confirm("هل تود حذف هذا الدرس نهائياً؟")) {
-            await supabase.from('lessons').delete().eq('id', id);
+            await supabase.from(tableName).delete().eq('id', id);
             loadLessons();
         }
     };
@@ -195,9 +189,7 @@
 
     window.closeAdmin = () => document.getElementById('adminPanel').style.display = 'none';
 
-    // بدء التحميل عند فتح الموقع
     loadLessons();
-
 </script>
 </body>
 </html>
