@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>منصة دروس السيد علي السبزواري</title>
+    <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Reem+Kufi:wght@500&display=swap" rel="stylesheet">
+    <style>
+        :root { --ashura-black: #0a0a0a; --blood-red: #8b0000; --shrine-gold: #c5a059; --text-gray: #d1d1d1; }
+        body { font-family: 'Amiri', serif; background-color: var(--ashura-black); color: var(--text-gray); margin: 0; padding: 0; }
+        header { background: linear-gradient(to bottom, #000, var(--blood-red)); padding: 50px 20px; text-align: center; border-bottom: 3px solid var(--shrine-gold); }
+        header h1 { color: var(--shrine-gold); font-family: 'Reem Kufi', sans-serif; font-size: 2.5rem; margin: 0; }
+        .container { max-width: 800px; margin: 40px auto; padding: 20px; }
+        .lesson-card { background: #151515; border-radius: 5px; padding: 25px; margin-bottom: 30px; box-shadow: 0 5px 15px rgba(0,0,0,0.5); border-right: 5px solid var(--blood-red); position: relative; }
+        .lesson-title { color: var(--shrine-gold); font-size: 1.5rem; margin-bottom: 15px; border-bottom: 1px solid #222; padding-bottom: 10px; }
+        audio { width: 100%; filter: invert(1) hue-rotate(180deg); }
+        .btn-text-file { display: inline-block; margin-top: 15px; color: var(--blood-red); text-decoration: none; border: 1px solid var(--blood-red); padding: 5px 15px; border-radius: 3px; transition: 0.3s; }
+        .btn-text-file:hover { background: var(--blood-red); color: white; }
+        #adminPanel { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.98); z-index: 9999; overflow-y: auto; padding: 20px; box-sizing: border-box; }
+        .modal { background: #1a1a1a; max-width: 600px; margin: 20px auto; padding: 30px; border: 1px solid var(--shrine-gold); }
+        input { width: 100%; padding: 12px; margin: 10px 0; background: #000; border: 1px solid #444; color: white; box-sizing: border-box; }
+        .btn-save { background: var(--blood-red); color: white; border: none; padding: 15px; width: 100%; font-size: 1.1rem; cursor: pointer; margin-top: 10px; }
+        .admin-table { width: 100%; margin-top: 30px; border-collapse: collapse; }
+        .admin-table td { padding: 10px; border-bottom: 1px solid #333; }
+        .status { font-size: 0.8rem; color: var(--shrine-gold); text-align: center; }
+        footer { text-align: center; padding: 40px; }
+        .lock-btn { background: none; border: none; color: #333; cursor: pointer; font-size: 1.5rem; }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>سماحة الأستاذ السيد علي السبزواري</h1>
+</header>
+
+<div class="container" id="lessonsContainer">
+    <p style="text-align:center;">جاري تحميل الدروس...</p>
+</div>
+
+<div id="adminPanel">
+    <div class="modal">
+        <h2 style="color: var(--shrine-gold); text-align: center;">إدارة المنصة العلمية</h2>
+        <div id="statusMsg" class="status"></div>
+        <input type="hidden" id="editDocId" value="">
+        <input type="text" id="lessonName" placeholder="عنوان الدرس">
+        <label>ملف الصوت (MP3):</label>
+        <input type="file" id="audioFile" accept="audio/*">
+        <label>ملف النص (PDF/Word):</label>
+        <input type="file" id="textFile" accept=".pdf,.doc,.docx,.txt">
+        
+        <button class="btn-save" id="saveBtn" onclick="uploadAndSave()">نشر / حفظ التغييرات</button>
+        <button onclick="closeAdmin()" style="width:100%; margin-top:10px; background:#333; color:white; border:none; padding:10px; cursor:pointer;">إلغاء وخروج</button>
+
+        <table class="admin-table" id="adminTable"></table>
+    </div>
+</div>
+
+<footer>
+    <button class="lock-btn" onclick="openAdmin()">⚙</button>
+</footer>
+
+<script type="module">
+    // استيراد مكتبة Supabase
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
+
+    // بيانات الربط الخاصة بك
+    const supabaseUrl = 'https://jtqmrpmthnomcwkcyyce.supabase.co';
+    const supabaseKey = 'أدخل_مفتاح_ANON_KEY_هنا'; // استخرجه من Settings > API
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // دالة الرفع والحفظ
+    window.uploadAndSave = async () => {
+        const name = document.getElementById('lessonName').value;
+        const audioFile = document.getElementById('audioFile').files[0];
+        const textFile = document.getElementById('textFile').files[0];
+        const editId = document.getElementById('editDocId').value;
+        const btn = document.getElementById('saveBtn');
+        const status = document.getElementById('statusMsg');
+
+        if (!name) return alert("يرجى كتابة العنوان");
+        
+        btn.disabled = true;
+        status.innerText = "جاري رفع الملفات إلى Supabase...";
+
+        try {
+            let audioUrl = "";
+            let textUrl = "";
+
+            // رفع الملف الصوتي
+            if (audioFile) {
+                const path = `audio/${Date.now()}_${audioFile.name}`;
+                const { data, error } = await supabase.storage.from('my-files').upload(path, audioFile);
+                if (error) throw error;
+                audioUrl = supabase.storage.from('my-files').getPublicUrl(path).data.publicUrl;
+            }
+
+            // رفع ملف النص
+            if (textFile) {
+                const path = `text/${Date.now()}_${textFile.name}`;
+                const { data, error } = await supabase.storage.from('my-files').upload(path, textFile);
+                if (error) throw error;
+                textUrl = supabase.storage.from('my-files').getPublicUrl(path).data.publicUrl;
+            }
+
+            if (editId) {
+                // تحديث بيانات موجودة
+                const updateData = { title: name };
+                if (audioUrl) updateData.audio_url = audioUrl;
+                if (textUrl) updateData.text_url = textUrl;
+                await supabase.from('lessons').update(updateData).eq('id', editId);
+            } else {
+                // إضافة درس جديد
+                await supabase.from('lessons').insert([{
+                    title: name,
+                    audio_url: audioUrl,
+                    text_url: textUrl
+                }]);
+            }
+
+            alert("تم الحفظ بنجاح!");
+            resetForm();
+            loadLessons();
+        } catch (e) {
+            console.error(e);
+            alert("حدث خطأ! تأكد من إعدادات Policies في الباكت my-files");
+        }
+        btn.disabled = false;
+        status.innerText = "";
+    };
+
+    // جلب البيانات من الجدول
+    async function loadLessons() {
+        const { data, error } = await supabase
+            .from('lessons')
+            .select('*')
+            .order('id', { ascending: false });
+        
+        if (data) {
+            renderUI(data);
+            renderAdminUI(data);
+        }
+    }
+
+    function renderUI(lessons) {
+        const container = document.getElementById('lessonsContainer');
+        container.innerHTML = lessons.map(l => `
+            <div class="lesson-card">
+                <div class="lesson-title">● ${l.title}</div>
+                ${l.audio_url ? `<audio controls src="${l.audio_url}"></audio>` : ''}
+                ${l.text_url ? `<a href="${l.text_url}" target="_blank" class="btn-text-file">📄 تحميل ملف الدرس</a>` : ''}
+            </div>
+        `).join('');
+    }
+
+    function renderAdminUI(lessons) {
+        const table = document.getElementById('adminTable');
+        table.innerHTML = lessons.map(l => `
+            <tr>
+                <td>${l.title}</td>
+                <td style="text-align:left">
+                    <button onclick="window.setupEdit('${l.id}', '${l.title}')" style="color:#4aa3ff; background:none; border:none; cursor:pointer;">تعديل</button>
+                    <button onclick="window.deleteItem('${l.id}')" style="color:#ff4a4a; background:none; border:none; cursor:pointer; margin-right:10px;">حذف</button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    window.deleteItem = async (id) => {
+        if (confirm("هل تود حذف هذا الدرس نهائياً؟")) {
+            await supabase.from('lessons').delete().eq('id', id);
+            loadLessons();
+        }
+    };
+
+    window.setupEdit = (id, title) => {
+        document.getElementById('editDocId').value = id;
+        document.getElementById('lessonName').value = title;
+        document.getElementById('saveBtn').innerText = "تحديث البيانات";
+        window.scrollTo(0, 0);
+    };
+
+    window.resetForm = () => {
+        document.getElementById('editDocId').value = "";
+        document.getElementById('lessonName').value = "";
+        document.getElementById('audioFile').value = "";
+        document.getElementById('textFile').value = "";
+        document.getElementById('saveBtn').innerText = "نشر / حفظ التغييرات";
+    };
+
+    window.openAdmin = () => {
+        if (prompt("كلمة المرور:") === "0000") {
+            document.getElementById('adminPanel').style.display = 'block';
+        }
+    };
+
+    window.closeAdmin = () => document.getElementById('adminPanel').style.display = 'none';
+
+    // بدء التحميل عند فتح الموقع
+    loadLessons();
+
+</script>
+</body>
+</html>
